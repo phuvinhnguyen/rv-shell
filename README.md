@@ -1,34 +1,12 @@
 # rv — a lean Hyprland desktop for Debian
 
+![alt](./assets/demo01.png)
+
 Hyprland + one Quickshell process + small terminal apps. A left bar that
 shows what matters; everything else (settings, Wi-Fi, Bluetooth, displays,
 audio, calendar) opens as a floating terminal app when you need it and is gone
 when you close it.
 
-<!-- Demo video: on github.com, edit this file, drag the .mp4 (≤ 10 MB on a
-     free account) into the editor and GitHub inserts a
-     https://github.com/user-attachments/assets/… link on its own line, which
-     plays inline. Don't commit the video: .gitattributes sends *.mp4 to Git
-     LFS, and README files can't play LFS videos. -->
-
-```
-┌────┐
-│   │  launcher: apps · utilities · clipboard · run · calc · web
-│ 1  │  workspaces (scroll to switch)
-│ •  │
-│    │
-│ 21 │  clock — hover: month + events, click: calendar
-│ 47 │
-│    │
-│ ♪  │  media (only while something plays)
-│ ◔  │  CPU / memory
-│ ⋮  │  tray
-│ 󰤨  │  Wi-Fi · Bluetooth · volume · battery
-│ 󰂚  │  notifications
-│ 󰒓  │  settings
-│ ⏻  │  power: lock, suspend, power mode, log out…
-└────┘
-```
 
 ## Memory
 
