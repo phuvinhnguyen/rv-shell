@@ -1,44 +1,10 @@
-# Tool output / caches — regenerated, never worth versioning.
-graphify-out/
+# Caches
 __pycache__/
 *.pyc
-*.pyo
-
-# Editor / backup leftovers.
-*.bak
 *~
 *.swp
 
-# Per-user state written by the shell at runtime. The repo ships the defaults
-# under *.default; the installer copies them into place on first install and
-# never overwrites an existing one, so a user's own tweaks survive `git pull`.
-stow_base/.config/quickshell/settings.json
-stow_base/.config/quickshell/dock/pinned.json
-stow_base/.config/quickshell/leftbar/pinned.json
-stow_base/.config/quickshell/launcher/frecency.json
-stow_base/.config/quickshell/topbar/history.json
-# Crash-reporter run state written by Quickshell/Qt at startup, not config.
-stow_base/.config/quickshell/.sentry-native/
-stow_base/.config/walllust/config.json
-
-# The avatar is a personal photo. Users drop their own in via the Settings app.
-stow_base/.config/quickshell/assets/avatar-*.png
-
-# fontconfig writes these per-directory cache markers; they are machine state.
-.uuid
-
-# Upstream's own DAMX suite installer -- it just downloads a release tarball,
-# so there is nothing here worth pinning to a snapshot.
-stow_base/.local/share/damx-driver/damx-suite-installer
-
-# Written per machine by Install.sh. ~/.config/hypr is a stow-folded symlink
-# into this repository, so these land inside the working tree.
-stow_base/.config/hypr/hardware.conf
-stow_base/.config/hypr/hardware.lua
-
-# Prebuilt AuraLink binaries (~23 MB, x86-64 only) used to be committed here
-# and went stale silently. Install.sh now builds them from
-# github.com/rajchauhan28/auralink, whose own install.sh also installs and
-# enables the Bluetooth auto-connect systemd unit.
-stow_base/.local/bin/auralink
-stow_base/.local/bin/auralink-bt
+# Per-user state lives outside the repository (~/.config/rv, ~/.local/share/rv),
+# but keep Quickshell's run-state out if it ever lands here.
+.sentry-native/
+.qmlls.ini

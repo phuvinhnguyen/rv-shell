@@ -1,6 +1,0 @@
-configuration {
-    modi: "drun,run,window";
-    show-icons: true;
-    font: "Inter 12";
-}
-@import "~/.cache/wal/colors-rofi-dark.rasi"

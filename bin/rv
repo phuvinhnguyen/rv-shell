@@ -1,0 +1,327 @@
+#!/usr/bin/env bash
+# rv: one entry point for the bar, the terminal apps and the session helpers.
+# Run `rv help` for the command list.
+set -euo pipefail
+
+self="$(readlink -f -- "${BASH_SOURCE[0]}")"
+repo="$(cd -- "$(dirname -- "$self")/.." && pwd)"
+shell_dir="$repo/config/quickshell/rv"
+tui_dir="$repo/tui"
+config_home="${XDG_CONFIG_HOME:-$HOME/.config}/rv"
+runtime="${XDG_RUNTIME_DIR:-/tmp}/rv-$UID"
+mkdir -p "$runtime"
+export RV_REPO="$repo"
+
+die() { printf 'rv: %s\n' "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+notify() { have notify-send && notify-send -a rv "$@" || true; }
+
+# Read one setting (dotted path) with the defaults applied.
+setting() { python3 "$tui_dir/rvlib.py" get "$1"; }
+
+# --------------------------------------------------------------- the shell
+qs_ipc() { qs ipc -p "$shell_dir" call "$@"; }
+
+shell_running() { qs_ipc shell ping >/dev/null 2>&1; }
+
+shell_start() {
+    have qs || die "Quickshell (qs) is not installed"
+    shell_running && return 0
+    # Fewer malloc arenas keep a long-running Qt process from hoarding freed memory.
+    local renderer
+    renderer="$(setting shell.renderer 2>/dev/null || true)"
+    if [[ -n "$renderer" && "$renderer" != auto ]]; then export QT_QUICK_BACKEND="$renderer"; fi
+    MALLOC_ARENA_MAX=2 qs -p "$shell_dir" --no-duplicate --daemonize >/dev/null 2>&1
+}
+
+# Call the shell, starting it first when it is not running.
+shell_call() {
+    if qs_ipc "$@" >/dev/null 2>&1; then return 0; fi
+    shell_start
+    for _ in $(seq 50); do
+        qs_ipc "$@" >/dev/null 2>&1 && return 0
+        sleep 0.05
+    done
+    die "the shell did not answer IPC"
+}
+
+# ---------------------------------------------------------------- terminals
+foot_server_up() { [[ -S "${XDG_RUNTIME_DIR:-/tmp}/foot-${WAYLAND_DISPLAY:-wayland-0}.sock" ]]; }
+
+# rv term [--float] [--app-id ID] [--title T] [--hold] [-- command...]
+term() {
+    local app_id="" title="" hold=false float=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --app-id) app_id="$2"; shift 2 ;;
+            --title) title="$2"; shift 2 ;;
+            --hold) hold=true; shift ;;
+            --float) float=true; shift ;;
+            --) shift; break ;;
+            *) break ;;
+        esac
+    done
+    $float && [[ -z "$app_id" ]] && app_id="rv.float"
+    local terminal
+    terminal="$(setting apps.terminal)"
+    case "$(basename -- "${terminal%% *}")" in
+        foot)
+            local args=()
+            [[ -n "$app_id" ]] && args+=(--app-id "$app_id")
+            [[ -n "$title" ]] && args+=(--title "$title")
+            $hold && args+=(--hold)
+            # A foot server shares one process (fonts, glyph cache) between all
+            # terminals; fall back to a standalone foot when it is not running.
+            if have footclient && foot_server_up; then
+                exec footclient --no-wait "${args[@]}" "$@"
+            fi
+            exec foot "${args[@]}" "$@" ;;
+        kitty)
+            exec kitty ${app_id:+--class "$app_id"} ${title:+--title "$title"} $($hold && echo --hold) "$@" ;;
+        alacritty)
+            if [[ $# -gt 0 ]]; then
+                exec alacritty ${app_id:+--class "$app_id"} ${title:+--title "$title"} $($hold && echo --hold) -e "$@"
+            fi
+            exec alacritty ${app_id:+--class "$app_id"} ${title:+--title "$title"} ;;
+        *)
+            # shellcheck disable=SC2086 # the setting may carry arguments
+            if [[ $# -gt 0 ]]; then exec $terminal -e "$@"; fi
+            exec $terminal ;;
+    esac
+}
+
+# rv open NAME: start a terminal app, or close it when it is already open.
+open_tui() {
+    local name="$1"; shift
+    local pidfile="$runtime/tui-$name.pid" pid
+    if [[ -r "$pidfile" ]]; then
+        pid="$(<"$pidfile")"
+        if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null &&
+            grep -qa "rv-tui-$name" "/proc/$pid/environ" 2>/dev/null; then
+            kill "$pid"
+            return 0
+        fi
+    fi
+    local title
+    case "$name" in
+        settings) title="Settings" ;; wifi) title="Wi-Fi" ;; bluetooth) title="Bluetooth" ;;
+        display) title="Displays" ;; audio) title="Audio" ;; calendar) title="Calendar" ;;
+        keys) title="Keybindings" ;; emoji) title="Emoji" ;; tools) title="Utilities" ;;
+        monitor) title="System monitor" ;; power) title="Power" ;; *) title="$name" ;;
+    esac
+    (term --app-id "rv.$name" --title "$title" -- "$self" _tui "$name" "$@" &) >/dev/null 2>&1
+}
+
+# Runs inside the terminal: record our pid, then become the app.
+run_tui() {
+    local name="$1"; shift
+    echo $$ >"$runtime/tui-$name.pid"
+    export RV_TUI="rv-tui-$name"
+    case "$name" in
+        monitor)
+            if have btop; then exec btop; fi
+            exec htop ;;
+        *)
+            local file="$name"
+            [[ "$name" == calendar ]] && file=cal   # calendar.py would shadow Python's own module
+            [[ -f "$tui_dir/$file.py" ]] || die "no terminal app named '$name'"
+            exec python3 "$tui_dir/$file.py" "$@" ;;
+    esac
+}
+
+# --------------------------------------------------------------------- apps
+desktop_launch() {
+    local id="${1%.desktop}"
+    if have gtk-launch; then gtk-launch "$id" >/dev/null 2>&1 & return 0; fi
+    have gio && { gio launch "$(find_desktop "$id")" >/dev/null 2>&1 & return 0; }
+    return 1
+}
+
+find_desktop() {
+    local dir
+    for dir in "${XDG_DATA_HOME:-$HOME/.local/share}" /var/lib/flatpak/exports/share \
+        "$HOME/.local/share/flatpak/exports/share" /usr/local/share /usr/share; do
+        [[ -f "$dir/applications/$1.desktop" ]] && { printf '%s\n' "$dir/applications/$1.desktop"; return 0; }
+    done
+    return 1
+}
+
+# A command counts as graphical when it ships a desktop entry that does not
+# ask for a terminal (code, gedit…); vim, nnn and friends open in a terminal.
+is_gui() {
+    local entry
+    entry="$(find_desktop "$1" 2>/dev/null)" || return 1
+    ! grep -qs '^Terminal=true' "$entry"
+}
+
+app() {
+    local role="$1" value
+    value="$(setting "apps.$role")"
+    if [[ "$value" != auto && -n "$value" ]]; then
+        if [[ "$role" == terminal ]]; then term; fi
+        if [[ "$role" == browser ]] || is_gui "${value%% *}"; then
+            # shellcheck disable=SC2086 # the setting may carry arguments
+            setsid -f $value >/dev/null 2>&1
+        else
+            # shellcheck disable=SC2086
+            term -- $value
+        fi
+        return 0
+    fi
+    case "$role" in
+        terminal) term ;;
+        browser)
+            local desktop
+            desktop="$(xdg-settings get default-web-browser 2>/dev/null || true)"
+            [[ -n "$desktop" ]] && desktop_launch "$desktop" && return 0
+            for value in firefox-esr firefox chromium; do
+                have "$value" && { setsid -f "$value" >/dev/null 2>&1; return 0; }
+            done
+            notify "No browser found" "Set one in rv settings → Apps" ;;
+        editor) term -- "${EDITOR:-vim}" ;;
+        files)
+            for value in yazi nnn ranger mc; do have "$value" && term -- "$value"; done
+            notify "No file manager found" "Install nnn, or set one in rv settings → Apps" ;;
+        monitor) open_tui monitor ;;
+    esac
+}
+
+# --------------------------------------------------------------- utilities
+screenshot() {
+    have grim || { notify -u critical "Screenshot unavailable" "Install grim (and slurp for regions)"; exit 1; }
+    local dir="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots" file geometry
+    mkdir -p "$dir"
+    file="$dir/$(date +%Y-%m-%d_%H-%M-%S).png"
+    case "${1:-region}" in
+        region)
+            have slurp || { notify -u critical "Screenshot unavailable" "Install slurp"; exit 1; }
+            geometry="$(slurp)" || exit 0
+            grim -g "$geometry" "$file" ;;
+        *) grim "$file" ;;
+    esac
+    wl-copy --type image/png <"$file"
+    notify -i "$file" -t 2500 "Screenshot copied" "$file"
+}
+
+power() {
+    case "${1:-menu}" in
+        menu) shell_call shell powerMenu ;;
+        lock) shell_call shell lock ;;
+        suspend) shell_call shell lock; sleep 0.6; systemctl suspend ;;
+        hibernate) shell_call shell lock; sleep 0.6; systemctl hibernate ;;
+        logout) hyprctl eval 'hl.dispatch(hl.dsp.exit())' >/dev/null ;;
+        reboot) systemctl reboot ;;
+        poweroff|shutdown) systemctl poweroff ;;
+        *) die "power: lock|suspend|hibernate|logout|reboot|poweroff|menu" ;;
+    esac
+}
+
+# Background helpers started once per session by the Hyprland config.
+session_helpers() {
+    if have foot && ! foot_server_up; then
+        setsid -f foot --server >/dev/null 2>&1
+    fi
+    if have wl-paste && have cliphist; then
+        pgrep -u "$UID" -f 'wl-paste --type text --watch cliphist' >/dev/null ||
+            setsid -f wl-paste --type text --watch cliphist -max-items 300 store >/dev/null 2>&1
+        pgrep -u "$UID" -f 'wl-paste --type image --watch cliphist' >/dev/null ||
+            setsid -f wl-paste --type image --watch cliphist -max-items 300 store >/dev/null 2>&1
+    fi
+    local agent
+    for agent in /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 \
+        /usr/libexec/hyprpolkitagent /usr/lib/x86_64-linux-gnu/libexec/polkit-kde-authentication-agent-1 \
+        "$(command -v lxpolkit || true)" "$(command -v lxqt-policykit-agent || true)"; do
+        if [[ -n "$agent" && -x "$agent" ]]; then
+            pgrep -u "$UID" -f "$agent" >/dev/null || setsid -f "$agent" >/dev/null 2>&1
+            break
+        fi
+    done
+}
+
+doctor() {
+    local missing=0 cmd
+    printf 'rv doctor — repo %s\n\n' "$repo"
+    for cmd in Hyprland qs foot python3 nmcli bluetoothctl wpctl pactl brightnessctl cliphist wl-copy \
+        grim slurp notify-send fzf vim; do
+        if have "$cmd"; then printf '  \e[32m✓\e[0m %s\n' "$cmd"
+        else printf '  \e[31m✗\e[0m %s\n' "$cmd"; missing=$((missing + 1)); fi
+    done
+    fc-list | grep -qi 'Nerd Font' && printf '  \e[32m✓\e[0m a Nerd Font\n' ||
+        { printf '  \e[31m✗\e[0m a Nerd Font (bar icons)\n'; missing=$((missing + 1)); }
+    shell_running && printf '\n  shell: running\n' || printf '\n  shell: stopped\n'
+    printf '  missing: %s\n' "$missing"
+}
+
+usage() {
+    cat <<'EOF'
+rv — lean Hyprland session
+
+Shell       start | stop | restart | bar [toggle|show|hide] | lock
+            launcher [apps|tools|clipboard|run|web] · launcher web "query"   notifications [list|clear|dnd]
+            osd brightness|volume   media toggle|next|previous|stop
+Terminal    open settings|wifi|bluetooth|display|audio|calendar|keys|emoji|tools|monitor
+            (running `rv open X` again closes it)   settings = open settings
+            term [--float] [--app-id ID] [--title T] [--hold] [-- cmd...]
+Apps        app terminal|browser|editor|files|monitor
+Utilities   tools [--json] | tool ID   screenshot [region|full]
+            wallpaper [next|prev|random|set FILE|none|fetch]   calendar-sync
+            power menu|lock|suspend|hibernate|logout|reboot|poweroff
+            power-mode saver|balanced|performance|cycle|get
+            get KEY (e.g. rv get bar.width)   doctor
+EOF
+}
+
+action="${1:-help}"
+[[ $# -gt 0 ]] && shift
+case "$action" in
+    start) shell_start ;;
+    stop|quit) qs_ipc shell quit >/dev/null 2>&1 || pkill -u "$UID" -f "qs -p $shell_dir" || true ;;
+    restart) "$self" stop; sleep 0.3; shell_start ;;
+    bar) shell_call bar "${1:-toggle}" ;;
+    lock) shell_call shell lock ;;
+    launcher)
+        if [[ "${1:-}" == web && $# -ge 2 ]]; then shift; shell_call launcher web "$*"
+        else shell_call launcher open "${1:-apps}"; fi ;;
+    notifications)
+        case "${1:-list}" in
+            list) shell_call notifications toggleList ;;
+            clear) shell_call notifications clear ;;
+            dnd) shell_call notifications toggleDnd ;;
+            *) die "notifications: list|clear|dnd" ;;
+        esac ;;
+    osd) shell_call osd show "${1:-volume}" ;;
+    media) shell_call media "${1:-toggle}" ;;
+    open) [[ $# -ge 1 ]] || die "open what? (settings, wifi, bluetooth, display, audio, calendar, keys, emoji, tools, monitor)"
+        open_tui "$@" ;;
+    settings) open_tui settings "$@" ;;
+    _tui) run_tui "$@" ;;
+    term) term "$@" ;;
+    app) app "${1:-terminal}" ;;
+    tools) exec python3 "$tui_dir/tools.py" list "$@" ;;
+    wallpaper) exec python3 "$tui_dir/wallpaper.py" "$@" ;;
+    calendar-sync) exec python3 "$tui_dir/calsync.py" --check ;;
+    tool) exec python3 "$tui_dir/tools.py" run "$@" ;;
+    screenshot) screenshot "$@" ;;
+    power) power "$@" ;;
+    power-mode)
+        have powerprofilesctl || die "install power-profiles-daemon"
+        case "${1:-cycle}" in
+            saver|power-saver) powerprofilesctl set power-saver ;;
+            balanced) powerprofilesctl set balanced ;;
+            performance) powerprofilesctl set performance ;;
+            cycle)
+                case "$(powerprofilesctl get)" in
+                    power-saver) powerprofilesctl set balanced ;;
+                    balanced) powerprofilesctl set performance 2>/dev/null || powerprofilesctl set power-saver ;;
+                    *) powerprofilesctl set power-saver ;;
+                esac ;;
+            get) powerprofilesctl get; exit 0 ;;
+            *) die "power-mode: saver|balanced|performance|cycle|get" ;;
+        esac
+        notify -t 1500 "Power mode" "$(powerprofilesctl get)" ;;
+    session-helpers) session_helpers ;;
+    get) setting "${1:?key}" ;;
+    doctor) doctor ;;
+    help|-h|--help) usage ;;
+    *) usage >&2; exit 2 ;;
+esac

@@ -1,0 +1,67 @@
+# Debian packages for rv. One per line; text after # is ignored.
+# Checked against Debian 13 (trixie). Hyprland, Quickshell and hyprpicker
+# come from trixie-backports on trixie:
+#
+#   echo 'deb http://deb.debian.org/debian trixie-backports main' |
+#       sudo tee /etc/apt/sources.list.d/backports.list
+#
+# `install.sh --packages` installs [core]; add --extras for [extras].
+
+[core]
+hyprland
+quickshell
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+dbus-user-session
+foot
+python3
+
+# Network, Bluetooth, audio, power — read natively by the bar
+network-manager
+bluez
+rfkill
+pipewire
+pipewire-pulse
+wireplumber
+# libspa-0.2-bluetooth (Bluetooth headphones/speakers) is installed by
+# install.sh at the same version as pipewire — backports or not.
+pulseaudio-utils        # pactl, used by `rv open audio`
+upower
+power-profiles-daemon   # power modes: saver · balanced · performance
+brightnessctl
+lxpolkit                # small PolicyKit agent for password prompts
+
+# Clipboard, screenshots, notifications
+wl-clipboard
+cliphist
+grim
+slurp
+libnotify-bin
+xdg-utils
+
+# Look
+fonts-noto-color-emoji
+papirus-icon-theme
+
+# Terminal life
+fzf
+bash-completion
+command-not-found       # suggests the package for an unknown command
+htop
+nnn                     # file manager for Super+E (set another in settings)
+curl
+
+# Vim for Python
+vim-nox
+vim-ale
+python3-pylsp
+black
+shellcheck
+
+[extras]
+hyprpicker              # Super+Shift+C colour picker
+btop                    # nicer system monitor; used instead of htop when present
+qrencode                # tools/qr-clipboard.sh
+tesseract-ocr           # tools/ocr-region.sh
+gammastep               # settings → Windows → warm screen
+git-lfs                 # fetch the wallpapers in wallpapers/ (git lfs pull)

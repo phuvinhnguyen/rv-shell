@@ -1,0 +1,153 @@
+" rv vimrc: a small, package-managed setup tuned for Python.
+"
+" Everything comes from Debian packages (see packages/debian.txt):
+"   vim-nox        Vim with +python3
+"   vim-ale        async lint / completion / go-to-definition (auto-loaded)
+"   python3-pylsp  Python language server (jedi completion, pyflakes, pycodestyle)
+"   black          formatter          (ruff is used too when installed via pipx)
+"
+" Keys (leader = Space):
+"   Space r   run this Python file in a split    Space f   format (black/ruff)
+"   Space e   file tree                          Space w   save
+"   gd / gr   definition / references            K         documentation
+"   [d / ]d   previous / next problem            Space rn  rename symbol
+"   Space ca  code action                        Space t   terminal split
+set nocompatible
+syntax enable
+filetype plugin indent on
+
+let mapleader = " "
+set number relativenumber cursorline
+set mouse=a hidden confirm
+set splitbelow splitright
+set ignorecase smartcase incsearch hlsearch
+set wildmenu wildmode=longest:full,full
+set completeopt=menuone,noinsert,noselect,popup
+set signcolumn=yes scrolloff=4 sidescrolloff=8
+set updatetime=300 timeoutlen=500
+set expandtab tabstop=4 shiftwidth=4 softtabstop=4 autoindent
+set undofile undodir=~/.local/state/vim/undo//
+set backspace=indent,eol,start
+set laststatus=2 showcmd
+if has("termguicolors") | set termguicolors | endif
+call mkdir(expand("~/.local/state/vim/undo"), "p")
+
+" Calm palette matching the shell, without a theme plugin.
+set background=dark
+highlight clear
+if exists("syntax_on") | syntax reset | endif
+let g:colors_name = "rv"
+highlight Normal       guifg=#e5e1e7 guibg=#131317
+highlight Comment      guifg=#8e8b97 gui=italic
+highlight Constant     guifg=#e0aaff
+highlight String       guifg=#a4e8bd
+highlight Identifier   guifg=#9ce7ef
+highlight Function     guifg=#b7c4ff
+highlight Statement    guifg=#c2c1ff gui=bold
+highlight PreProc      guifg=#f0c674
+highlight Type         guifg=#70d7e5
+highlight Special      guifg=#ff8fa3
+highlight LineNr       guifg=#595992 guibg=#131317
+highlight CursorLine   guibg=#1c1b22
+highlight CursorLineNr guifg=#c2c1ff guibg=#1c1b22 gui=bold
+highlight SignColumn   guibg=#131317
+highlight Visual       guibg=#34334a
+highlight Search       guifg=#131317 guibg=#f0c674
+highlight IncSearch    guifg=#131317 guibg=#ff8fa3
+highlight StatusLine   guifg=#131317 guibg=#c2c1ff gui=bold
+highlight StatusLineNC guifg=#8e8b97 guibg=#201f27
+highlight VertSplit    guifg=#201f27 guibg=#131317
+highlight Pmenu        guifg=#e5e1e7 guibg=#201f27
+highlight PmenuSel     guifg=#131317 guibg=#c2c1ff gui=bold
+highlight MatchParen   guifg=#131317 guibg=#83d6a2 gui=bold
+highlight ALEErrorSign   guifg=#ff7185 guibg=#131317
+highlight ALEWarningSign guifg=#f0c674 guibg=#131317
+highlight ALEError     gui=undercurl guisp=#ff7185
+highlight ALEWarning   gui=undercurl guisp=#f0c674
+
+" Status line: file, problems, position.
+function! RvProblems() abort
+    if !exists("*ale#statusline#Count") | return "" | endif
+    let l:c = ale#statusline#Count(bufnr(""))
+    let l:e = l:c.error + l:c.style_error
+    let l:w = l:c.total - l:e
+    return l:c.total == 0 ? "" : printf(" E%d W%d ", l:e, l:w)
+endfunction
+set statusline=\ %f%m%r\ %=%{RvProblems()}\ %y\ %l:%c\
+
+augroup rv_filetypes
+    autocmd!
+    autocmd FileType make setlocal noexpandtab
+    autocmd FileType css,html,javascript,json,typescript,yaml,lua setlocal shiftwidth=2 softtabstop=2
+    autocmd FileType python setlocal colorcolumn=89 textwidth=88
+augroup END
+
+" ALE: language servers start only when a file of that type is opened.
+let g:ale_linters_explicit = 1
+let g:ale_linters = {
+    \ "python": ["pylsp", "ruff"],
+    \ "sh": ["shellcheck"],
+    \ "c": ["clangd"], "cpp": ["clangd"],
+    \ }
+let g:ale_fixers = {
+    \ "*": ["remove_trailing_lines", "trim_whitespace"],
+    \ "python": executable("ruff") ? ["ruff", "ruff_format"] : ["black"],
+    \ }
+let g:ale_python_auto_virtualenv = 1
+let g:ale_completion_enabled = 1
+let g:ale_completion_autoimport = 1
+let g:ale_lint_delay = 300
+let g:ale_echo_msg_format = "[%linter%] %s"
+let g:ale_sign_error = "●"
+let g:ale_sign_warning = "▲"
+let g:ale_hover_to_floating_preview = 1
+let g:ale_floating_window_border = ["│", "─", "╭", "╮", "╯", "╰", "│", "─"]
+
+" Tab / Shift+Tab move through the completion menu.
+inoremap <expr> <Tab>   pumvisible() ? "\<C-n>" : "\<Tab>"
+inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
+
+" Run the current file: python (or the project's .venv), sh, or make.
+function! RvRun() abort
+    write
+    if &filetype ==# "python"
+        let l:py = filereadable(".venv/bin/python") ? ".venv/bin/python" : "python3"
+        execute "botright terminal ++rows=12 " . l:py . " " . shellescape(expand("%"))
+    elseif &filetype ==# "sh"
+        execute "botright terminal ++rows=12 bash " . shellescape(expand("%"))
+    else
+        execute "botright terminal ++rows=12 make"
+    endif
+endfunction
+
+" Clipboard: Debian's vim-nox has no clipboard, so send yanks to wl-copy.
+if !has("clipboard") && executable("wl-copy")
+    augroup rv_clipboard
+        autocmd!
+        autocmd TextYankPost * if v:event.operator ==# "y" && v:event.regname ==# "" |
+            \ call system("wl-copy", join(v:event.regcontents, "\n")) | endif
+    augroup END
+    nnoremap <silent> <leader>p :let @" = system("wl-paste --no-newline")<CR>p
+endif
+
+let g:netrw_banner = 0
+let g:netrw_liststyle = 3
+let g:netrw_winsize = 25
+nnoremap <silent> <leader>w :write<CR>
+nnoremap <silent> <leader>e :Lexplore<CR>
+nnoremap <silent> <leader>r :call RvRun()<CR>
+nnoremap <silent> <leader>t :botright terminal ++rows=12<CR>
+nnoremap <silent> <leader>f :ALEFix<CR>
+nnoremap <silent> <leader>rn :ALERename<CR>
+nnoremap <silent> <leader>ca :ALECodeAction<CR>
+nnoremap <silent> gd :ALEGoToDefinition<CR>
+nnoremap <silent> gr :ALEFindReferences<CR>
+nnoremap <silent> K :ALEHover<CR>
+nnoremap <silent> [d :ALEPreviousWrap<CR>
+nnoremap <silent> ]d :ALENextWrap<CR>
+nnoremap <silent> <Esc><Esc> :nohlsearch<CR>
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+tnoremap <Esc><Esc> <C-\><C-n>

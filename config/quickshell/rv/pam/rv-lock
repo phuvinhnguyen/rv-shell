@@ -1,0 +1,2 @@
+# PAM stack for the rv lock screen: check the user's own password.
+auth required pam_unix.so

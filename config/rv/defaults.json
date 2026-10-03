@@ -1,0 +1,81 @@
+{
+  "shell": {
+    "renderer": "software"
+  },
+  "apps": {
+    "terminal": "foot",
+    "browser": "auto",
+    "editor": "vim",
+    "files": "auto",
+    "monitor": "auto"
+  },
+  "bar": {
+    "width": 44,
+    "allMonitors": true,
+    "workspaces": 5,
+    "clock24h": true,
+    "showDate": true,
+    "showStats": true,
+    "showMedia": true,
+    "showTray": true,
+    "showBattery": true
+  },
+  "launcher": {
+    "searchEngine": "https://duckduckgo.com/?q={query}",
+    "webResults": 6,
+    "webLocale": "wt-wt"
+  },
+  "calendar": {
+    "sources": [],
+    "syncMinutes": 30
+  },
+  "theme": {
+    "accent": "#c2c1ff",
+    "background": "#131317",
+    "surface": "#201f27",
+    "text": "#e5e1e7",
+    "muted": "#8e8b97",
+    "good": "#83d6a2",
+    "warn": "#f0c674",
+    "bad": "#ff7185",
+    "opacity": 1.0,
+    "rounding": 12,
+    "font": "Hack Nerd Font",
+    "fontSize": 12
+  },
+  "wallpaper": {
+    "path": "",
+    "fill": "crop"
+  },
+  "idle": {
+    "lockMinutes": 5,
+    "screenOffMinutes": 7,
+    "suspendMinutes": 0
+  },
+  "notifications": {
+    "timeoutSeconds": 5,
+    "doNotDisturb": false
+  },
+  "hypr": {
+    "layout": "scrolling",
+    "gapsIn": 4,
+    "gapsOut": 8,
+    "border": 2,
+    "rounding": 12,
+    "blur": false,
+    "shadow": false,
+    "animations": true,
+    "nightLight": false,
+    "kbLayout": "us",
+    "kbOptions": "",
+    "repeatRate": 35,
+    "repeatDelay": 250,
+    "naturalScroll": true,
+    "sensitivity": 0.0
+  },
+  "tools": {
+    "paths": [
+      "~/.config/rv/tools"
+    ]
+  }
+}

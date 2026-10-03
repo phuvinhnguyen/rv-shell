@@ -1,27 +1,25 @@
-name: Lint Bash Scripts
+name: Lint
 
 on:
   push:
-    branches: [ main, master ]
   pull_request:
-    branches: [ main, master ]
 
 jobs:
-  shellcheck:
-    name: Shellcheck
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
-        with:
-          scandir: './'
-          # stow_base/.local holds desktop-entry templates and fonts, no scripts.
-          ignore_paths: 'stow_base/.local'
-          # .zshrc is zsh, and ShellCheck has no zsh support -- it lints the
-          # file as bash and reports zsh's own syntax as errors: `${(j:,:)a}`
-          # parameter-expansion flags, `$array[idx]` subscripting, and every
-          # oh-my-zsh variable as "appears unused". All false positives, and
-          # they are what kept this workflow red.
-          ignore_names: '.zshrc'
+      - name: ShellCheck
+        run: shellcheck -x bin/rv install.sh tools/*.sh config/bash/rv.bash
+
+      - name: Python
+        run: python3 -m py_compile tui/*.py
+
+      - name: JSON
+        run: python3 -m json.tool config/rv/defaults.json >/dev/null
+
+      - name: Lua syntax
+        run: |
+          sudo apt-get install -y -qq lua5.4 >/dev/null
+          for f in config/hypr/hyprland.lua config/hypr/rv/*.lua; do luac5.4 -p "$f"; done
