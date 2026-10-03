@@ -7,14 +7,13 @@ self="$(readlink -f -- "${BASH_SOURCE[0]}")"
 repo="$(cd -- "$(dirname -- "$self")/.." && pwd)"
 shell_dir="$repo/config/quickshell/rv"
 tui_dir="$repo/tui"
-config_home="${XDG_CONFIG_HOME:-$HOME/.config}/rv"
 runtime="${XDG_RUNTIME_DIR:-/tmp}/rv-$UID"
 mkdir -p "$runtime"
 export RV_REPO="$repo"
 
 die() { printf 'rv: %s\n' "$*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
-notify() { have notify-send && notify-send -a rv "$@" || true; }
+notify() { if have notify-send; then notify-send -a rv "$@" || true; fi; }
 
 # Read one setting (dotted path) with the defaults applied.
 setting() { python3 "$tui_dir/rvlib.py" get "$1"; }
@@ -76,13 +75,16 @@ term() {
                 exec footclient --no-wait "${args[@]}" "$@"
             fi
             exec foot "${args[@]}" "$@" ;;
-        kitty)
-            exec kitty ${app_id:+--class "$app_id"} ${title:+--title "$title"} $($hold && echo --hold) "$@" ;;
-        alacritty)
+        kitty|alacritty)
+            local args=()
+            [[ -n "$app_id" ]] && args+=(--class "$app_id")
+            [[ -n "$title" ]] && args+=(--title "$title")
+            $hold && args+=(--hold)
+            if [[ "$terminal" == kitty* ]]; then exec kitty "${args[@]}" "$@"; fi
             if [[ $# -gt 0 ]]; then
-                exec alacritty ${app_id:+--class "$app_id"} ${title:+--title "$title"} $($hold && echo --hold) -e "$@"
+                exec alacritty "${args[@]}" -e "$@"
             fi
-            exec alacritty ${app_id:+--class "$app_id"} ${title:+--title "$title"} ;;
+            exec alacritty "${args[@]}" ;;
         *)
             # shellcheck disable=SC2086 # the setting may carry arguments
             if [[ $# -gt 0 ]]; then exec $terminal -e "$@"; fi
@@ -123,7 +125,8 @@ run_tui() {
             exec htop ;;
         *)
             local file="$name"
-            [[ "$name" == calendar ]] && file=cal   # calendar.py would shadow Python's own module
+            # calendar.py would shadow Python's own module.
+            if [[ "$name" == calendar ]]; then file="cal"; fi
             [[ -f "$tui_dir/$file.py" ]] || die "no terminal app named '$name'"
             exec python3 "$tui_dir/$file.py" "$@" ;;
     esac
@@ -246,9 +249,9 @@ doctor() {
         if have "$cmd"; then printf '  \e[32m✓\e[0m %s\n' "$cmd"
         else printf '  \e[31m✗\e[0m %s\n' "$cmd"; missing=$((missing + 1)); fi
     done
-    fc-list | grep -qi 'Nerd Font' && printf '  \e[32m✓\e[0m a Nerd Font\n' ||
-        { printf '  \e[31m✗\e[0m a Nerd Font (bar icons)\n'; missing=$((missing + 1)); }
-    shell_running && printf '\n  shell: running\n' || printf '\n  shell: stopped\n'
+    if fc-list | grep -qi 'Nerd Font'; then printf '  \e[32m✓\e[0m a Nerd Font\n'
+    else printf '  \e[31m✗\e[0m a Nerd Font (bar icons)\n'; missing=$((missing + 1)); fi
+    if shell_running; then printf '\n  shell: running\n'; else printf '\n  shell: stopped\n'; fi
     printf '  missing: %s\n' "$missing"
 }
 

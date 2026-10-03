@@ -5,6 +5,12 @@ shows what matters; everything else (settings, Wi-Fi, Bluetooth, displays,
 audio, calendar) opens as a floating terminal app when you need it and is gone
 when you close it.
 
+<!-- Demo video: on github.com, edit this file, drag the .mp4 (≤ 10 MB on a
+     free account) into the editor and GitHub inserts a
+     https://github.com/user-attachments/assets/… link on its own line, which
+     plays inline. Don't commit the video: .gitattributes sends *.mp4 to Git
+     LFS, and README files can't play LFS videos. -->
+
 ```
 ┌────┐
 │   │  launcher: apps · utilities · clipboard · run · calc · web
@@ -52,7 +58,8 @@ How it stays small:
 ## Install
 
 ```bash
-git clone <this repo> ~/.Settings/hypr-dotfiles && cd ~/.Settings/hypr-dotfiles
+git clone -b debian-lean https://github.com/phuvinhnguyen/rv-shell.git ~/.Settings/hypr-dotfiles
+cd ~/.Settings/hypr-dotfiles
 ./install.sh              # shows the plan and current state; changes nothing
 ./install.sh --all        # apt packages (sudo) + Nerd Font if missing + links
 ```

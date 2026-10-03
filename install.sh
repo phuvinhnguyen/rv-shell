@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# "~/…" in this script's messages is display text for the user, not a path.
+# shellcheck disable=SC2088
 # rv installer for Debian. Run without options to see what it would do.
 #
 #   ./install.sh                 plan + current status (changes nothing)
@@ -47,7 +49,8 @@ status() {
         elif [[ -e "$target" || -L "$target" ]]; then warn "$target exists (would be backed up and replaced)"
         else info "· $target (would be created)"; fi
     done
-    grep -qsF "$bashrc_line" "$HOME/.bashrc" && ok "~/.bashrc sources rv.bash" || info "· ~/.bashrc would source config/bash/rv.bash"
+    if grep -qsF "$bashrc_line" "$HOME/.bashrc"; then ok "~/.bashrc sources rv.bash"
+    else info "· ~/.bashrc would source config/bash/rv.bash"; fi
     bold "Packages"
     local missing=()
     while read -r pkg; do installed "$pkg" || missing+=("$pkg"); done < <(packages core)
@@ -56,8 +59,10 @@ status() {
     while read -r pkg; do installed "$pkg" || missing+=("$pkg"); done < <(packages extras)
     ((${#missing[@]})) && info "· optional extras not installed: ${missing[*]}"
     bold "Other"
-    fc-list 2>/dev/null | grep -qi 'Nerd Font' && ok "a Nerd Font is installed" || warn "no Nerd Font (bar icons) — use --fonts"
-    [[ -f "${XDG_DATA_HOME:-$HOME/.local/share}/blesh/ble.sh" ]] && ok "ble.sh installed" || info "· ble.sh not installed (optional: --blesh)"
+    if fc-list 2>/dev/null | grep -qi 'Nerd Font'; then ok "a Nerd Font is installed"
+    else warn "no Nerd Font (bar icons) — use --fonts"; fi
+    if [[ -f "${XDG_DATA_HOME:-$HOME/.local/share}/blesh/ble.sh" ]]; then ok "ble.sh installed"
+    else info "· ble.sh not installed (optional: --blesh)"; fi
     case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) warn "~/.local/bin is not on PATH (Hyprland calls rv by full path; your shell won't find 'rv')";; esac
 }
 
@@ -79,7 +84,7 @@ install_packages() {
     else
         sudo apt-get install -y libspa-0.2-bluetooth
     fi
-    command -v update-command-not-found >/dev/null && sudo update-command-not-found >/dev/null 2>&1 || true
+    if command -v update-command-not-found >/dev/null; then sudo update-command-not-found >/dev/null 2>&1 || true; fi
 }
 
 install_fonts() {
@@ -141,12 +146,15 @@ apply() {
     # Documents permission and save through /run/user/…/doc portal paths.
     if [[ ! -f "$config/user-dirs.dirs" ]]; then
         {
+            # $HOME stays literal: user-dirs.dirs expands it itself.
+            # shellcheck disable=SC2016
             printf '# Standard folders; "$HOME/" switches one off.\n'
             local name dir
             for name in DOWNLOAD:Downloads DOCUMENTS:Documents PICTURES:Pictures DESKTOP:Desktop \
                 MUSIC:Music VIDEOS:Videos PUBLICSHARE:Public TEMPLATES:Templates; do
                 dir="${name#*:}"
                 [[ -d "$HOME/$dir" ]] || dir=""
+                # shellcheck disable=SC2016
                 printf 'XDG_%s_DIR="$HOME/%s"\n' "${name%%:*}" "$dir"
             done
         } >"$config/user-dirs.dirs"
@@ -161,8 +169,12 @@ apply() {
 }
 
 rollback() {
-    local backup line kind target
-    backup="$(ls -1d "$state"/backups/*/ 2>/dev/null | tail -n1)"
+    local backup kind target candidate
+    backup=""
+    for candidate in "$state"/backups/*/; do
+        # Skip backups that were already rolled back.
+        [[ -f "$candidate/manifest" && "$candidate" != *.rolled-back/ ]] && backup="$candidate"
+    done
     [[ -n "$backup" && -f "$backup/manifest" ]] || { warn "no backup found in $state/backups"; exit 1; }
     bold "Rolling back from $backup"
     while IFS=$'\t' read -r kind target; do
@@ -192,5 +204,5 @@ case "${1:-}" in
     --blesh) install_blesh ;;
     --all) install_packages; install_fonts; apply ;;
     --rollback) rollback ;;
-    *) sed -n '2,13p' "$0"; exit 2 ;;
+    *) sed -n '/^# rv installer/,/^set -euo/{/^set/d;p}' "$0"; exit 2 ;;
 esac

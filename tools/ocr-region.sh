@@ -6,7 +6,7 @@
 # keywords: ocr tesseract copy text recognise
 set -euo pipefail
 
-notify() { command -v notify-send >/dev/null && notify-send -a rv "$@" || true; }
+notify() { if command -v notify-send >/dev/null; then notify-send -a rv "$@" || true; fi; }
 for cmd in grim slurp tesseract wl-copy; do
     command -v "$cmd" >/dev/null || { notify -u critical "OCR unavailable" "Install grim, slurp and tesseract-ocr"; exit 1; }
 done
