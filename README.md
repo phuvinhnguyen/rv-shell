@@ -144,6 +144,19 @@ To **create** events that land in Google/Outlook, add the account in
 Evolution (`E` in the calendar app opens it), create the event there, and it
 syncs back into rv. rv's own events (`a`) stay on this machine.
 
+## Research papers (Zen + Obsidian)
+
+Save PDFs into the vault's `Papers` folder (Zen's Save In → `Obsidian-Papers`).
+With `rv papers enable`, each new PDF is renamed
+`2025 - Andriushchenko et al - Jailbreaking … Attacks (ICLR 2025).pdf` and gets a
+note in `Papers/Notes` with authors, venue, links, abstract and BibTeX. Links
+to the old file name in your notes are rewritten (backups in
+`~/.local/state/rv/papers-backup/`). Papers are found by arXiv id or DOI, or by
+the title embedded in the PDF (CVF, ACL Anthology). Venues come from arXiv
+comments ("Accepted at …"), the DOI, or — with a free key in settings —
+Semantic Scholar / OpenAlex. `rv papers scan --dry-run` shows the plan first;
+`rv papers status` lists what was filed.
+
 ## Your own utilities
 
 Drop a script in `~/.config/rv/tools/` and it is in the launcher — see

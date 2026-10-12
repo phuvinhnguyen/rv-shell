@@ -13,7 +13,7 @@ ColumnLayout {
         const lead = (month.getDay() + 6) % 7;
         return new Date(month.getFullYear(), month.getMonth(), 1 - lead);
     }
-    readonly property var upcoming: CalendarData.upcoming(8)
+    readonly property var upcoming: CalendarData.upcoming(8, root.now)
 
     spacing: 8
     width: 7 * 30
@@ -127,9 +127,10 @@ ColumnLayout {
             spacing: 8
             Text {
                 Layout.preferredWidth: 58
-                text: CalendarData.iso(modelData.date) === CalendarData.iso(root.now)
+                text: modelData.state === "now" ? "now"
+                      : CalendarData.iso(modelData.date) === CalendarData.iso(root.now)
                       ? (modelData.event.time || "today") : Qt.formatDate(modelData.date, "ddd d")
-                color: Config.accent
+                color: modelData.state === "now" ? Config.good : Config.accent
                 font.family: Config.font
                 font.pixelSize: Config.fontSize - 2
             }
@@ -139,6 +140,7 @@ ColumnLayout {
                 elide: Text.ElideRight
                 text: modelData.event.title || "(untitled)"
                 color: Config.text
+                font.bold: modelData.state === "now"
                 font.family: Config.font
                 font.pixelSize: Config.fontSize - 1
             }

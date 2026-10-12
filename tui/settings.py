@@ -83,6 +83,12 @@ SECTIONS: dict[str, list[tuple]] = {
         ("launcher.searchEngine", "Web search in browser", "text", None, "{query} is replaced; Shift+Enter in web search"),
         ("launcher.webResults", "Web results in launcher", "int", (1, 10, 1), "Pages listed under the quick answer"),
         ("launcher.webLocale", "Web search region", "text", None, "DuckDuckGo region, e.g. wt-wt (none), vn-vi, us-en"),
+        ("papers.vault", "Papers: Obsidian vault", "text", None, "Where `rv papers` files PDFs"),
+        ("papers.folder", "Papers: PDF folder", "text", None, "Inside the vault; watched for new PDFs"),
+        ("papers.notes", "Papers: notes folder", "text", None, "Inside the vault"),
+        ("papers.rename", "Papers: file name", "text", None, "{year} {authors} {first} {title} {venue} {arxiv} {doi}"),
+        ("papers.semanticScholarKey", "Papers: Semantic Scholar key", "text", None, "Optional: finds venues arXiv doesn't state"),
+        ("papers.openalexKey", "Papers: OpenAlex key", "text", None, "Optional, free at openalex.org"),
         ("shell.renderer", "Shell renderer", "choice", ["software", "auto"], "software: least memory · restart the bar"),
     ],
     "More": [

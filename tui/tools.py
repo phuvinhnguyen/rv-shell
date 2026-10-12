@@ -60,6 +60,7 @@ BUILTINS: list[tuple[str, str, str, str, list[str], str]] = [
     ("wallpaper-next", "Wallpaper: next", "\U000f02e9", "Next picture from ~/Pictures", [RV, "wallpaper", "next"], "background image"),
     ("wallpaper-random", "Wallpaper: random", "\U000f02e9", "A random picture", [RV, "wallpaper", "random"], "background image shuffle"),
     ("wallpaper-none", "Wallpaper: none", "\U000f02e9", "Plain colour, least memory", [RV, "wallpaper", "none"], "background"),
+    ("papers", "Papers: file new PDFs", "\U000f0219", "Rename research PDFs and create Obsidian notes", [RV, "papers"], "obsidian arxiv bibtex research"),
     ("calendar-sync", "Sync calendars", "\U000f00ed", "Fetch Google/Outlook/ICS/Evolution events now", [RV, "calendar-sync"], "refresh"),
     ("dnd", "Do not disturb", "\U000f0a91", "Toggle notification popups", [RV, "notifications", "dnd"], "silence quiet"),
     ("bar", "Toggle bar", "\U000f10aa", "Show or hide the bar (Super+K)", [RV, "bar", "toggle"], "panel hide"),

@@ -310,6 +310,48 @@ def fetch(url: str) -> str:
         return response.read(20_000_000).decode(response.headers.get_content_charset() or "utf-8", "replace")
 
 
+def _registry_calendars() -> dict[str, str]:
+    """uid → name of every enabled calendar, asked from Evolution's source
+    registry over D-Bus. Calendars of online accounts (Google, Microsoft 365…)
+    exist only there: Evolution discovers them at runtime and never writes
+    them to ~/.config/evolution/sources."""
+    raw = rvlib.output(["gdbus", "call", "--session", "--dest", "org.gnome.evolution.dataserver.Sources5",
+                        "--object-path", "/org/gnome/evolution/dataserver/SourceManager",
+                        "--method", "org.freedesktop.DBus.ObjectManager.GetManagedObjects"], timeout=10)
+    found: dict[str, str] = {}
+    for uid, data in re.findall(r"'UID': <'([^']+)'>.*?'Data': <'((?:[^'\\]|\\.)*)'>", raw, re.S):
+        # GVariant text escapes; the rest is already UTF-8 text.
+        data = re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), data)
+        parser = ConfigParser(interpolation=None, strict=False)
+        try:
+            parser.read_string(data)
+        except Exception:
+            continue
+        if not parser.has_section("Calendar"):
+            continue
+        if parser.get("Data Source", "Enabled", fallback="true").lower() == "false":
+            continue
+        found[uid] = parser.get("Data Source", "DisplayName", fallback=uid)
+    return found
+
+
+def _file_calendars() -> dict[str, str]:
+    """Fallback when the registry is not running: the .source files on disk."""
+    names: dict[str, str] = {}
+    sources = Path.home() / ".config/evolution/sources"
+    for file in sources.glob("*.source") if sources.is_dir() else []:
+        parser = ConfigParser(interpolation=None, strict=False)
+        try:
+            parser.read(file)
+        except Exception:
+            continue
+        if parser.has_section("Calendar") and \
+                parser.get("Data Source", "Enabled", fallback="true").lower() != "false":
+            names[file.stem] = parser.get("Data Source", "DisplayName", fallback=file.stem)
+    names.setdefault("system-calendar", "Personal")
+    return names
+
+
 def evolution_calendars() -> list[tuple[str, str]]:
     """(display name, iCalendar text) for every enabled Evolution calendar.
 
@@ -319,19 +361,7 @@ def evolution_calendars() -> list[tuple[str, str]]:
     no Evolution libraries are needed to read them.
     """
     home = Path.home()
-    names: dict[str, str] = {}
-    sources = home / ".config/evolution/sources"
-    for file in sources.glob("*.source") if sources.is_dir() else []:
-        parser = ConfigParser(interpolation=None, strict=False)
-        try:
-            parser.read(file)
-        except Exception:
-            continue
-        if not parser.has_section("Calendar"):
-            continue
-        if parser.get("Data Source", "Enabled", fallback="true").lower() == "false":
-            continue
-        names[file.stem] = parser.get("Data Source", "DisplayName", fallback=file.stem)
+    names = _registry_calendars() or _file_calendars()
     found = []
     for uid, name in names.items():
         texts = []
@@ -342,7 +372,8 @@ def evolution_calendars() -> list[tuple[str, str]]:
                     texts = [row[0] for row in conn.execute("SELECT ECacheOBJ FROM ECacheObjects") if row[0]]
             except sqlite3.Error:
                 texts = []
-        local = home / ".local/share/evolution/calendar" / uid / "calendar.ics"
+        folder = "system" if uid == "system-calendar" else uid
+        local = home / ".local/share/evolution/calendar" / folder / "calendar.ics"
         if local.is_file():
             texts.append(local.read_text(errors="replace"))
         if texts:

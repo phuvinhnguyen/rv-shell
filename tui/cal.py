@@ -104,9 +104,23 @@ class CalendarApp(rvlib.App):
     def save(self) -> None:
         rvlib.write_json(DATA, {"events": self.events})
 
+    @staticmethod
+    def state(event: dict, day: dt.date) -> str:
+        """past / now / next relative to the clock (only today's timed events)."""
+        if day != dt.date.today() or not event.get("time"):
+            return "next"
+        now = dt.datetime.now().strftime("%H:%M")
+        start = event["time"]
+        end = event.get("end") or (dt.datetime.strptime(start, "%H:%M") + dt.timedelta(hours=1)).strftime("%H:%M")
+        if end <= start:
+            end = "23:59"
+        return "past" if now >= end else "now" if now >= start else "next"
+
     def on_day(self, day: dt.date) -> list[dict]:
+        """Time order; on today, events already over sink to the end."""
         mine = [e for e in self.events if occurs(e, day)]
-        return sorted(mine + self.synced.get(day.isoformat(), []), key=lambda e: e.get("time") or "")
+        return sorted(mine + self.synced.get(day.isoformat(), []),
+                      key=lambda e: (self.state(e, day) == "past", bool(e.get("time")), e.get("time") or ""))
 
     def draw(self) -> None:
         s = self.screen
@@ -144,12 +158,16 @@ class CalendarApp(rvlib.App):
             self.put(ay + 2, ax, "No events — press a to add one", width, A(rvlib.DIM))
         for i, e in enumerate(events[: max(0, h - ay - 5)]):
             span = f"{e['time']}–{e['end']}" if e.get("end") else (e.get("time") or "all day")
-            label = f"{span:>11}  {e.get('title') or '(untitled)'}"
+            when = self.state(e, self.day)
+            mark = "▶ " if when == "now" else "  "
+            label = f"{mark}{span:>11}  {e.get('title') or '(untitled)'}"
             if e.get("calendar"):
                 label += f"  · {e['calendar']}"
             if e.get("repeat", "none") != "none":
                 label += f"  ↻ {e['repeat']}"
-            self.put(ay + 2 + i, ax, label.ljust(width), width, A(rvlib.SELECTED) if i == self.pick else 0)
+            style = A(rvlib.SELECTED) if i == self.pick else \
+                A(rvlib.GOOD, curses.A_BOLD) if when == "now" else A(rvlib.DIM) if when == "past" else 0
+            self.put(ay + 2 + i, ax, label.ljust(width), width, style)
             extra = e.get("note") or e.get("location")
             if extra and i == self.pick:
                 self.put(ay + 3 + len(events), ax, extra, width, A(rvlib.DIM))
@@ -161,6 +179,8 @@ class CalendarApp(rvlib.App):
             for n in range(14):
                 d = today + dt.timedelta(days=n)
                 for e in self.on_day(d):
+                    if self.state(e, d) == "past":
+                        continue
                     if line >= h - 3:
                         break
                     when = "today" if n == 0 else "tomorrow" if n == 1 else d.strftime("%a %-d %b")

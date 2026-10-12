@@ -29,6 +29,14 @@
     "sources": [],
     "syncMinutes": 30
   },
+  "papers": {
+    "vault": "~/Documents/Obsidian Vault",
+    "folder": "Papers",
+    "notes": "Papers/Notes",
+    "rename": "{year} - {authors} - {title} ({venue})",
+    "semanticScholarKey": "",
+    "openalexKey": ""
+  },
   "theme": {
     "accent": "#c2c1ff",
     "background": "#131317",

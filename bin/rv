@@ -268,6 +268,7 @@ Terminal    open settings|wifi|bluetooth|display|audio|calendar|keys|emoji|tools
 Apps        app terminal|browser|editor|files|monitor
 Utilities   tools [--json] | tool ID   screenshot [region|full]
             wallpaper [next|prev|random|set FILE|none|fetch]   calendar-sync
+            papers [enable|disable|status|file PDF]   (rename PDFs + Obsidian notes)
             power menu|lock|suspend|hibernate|logout|reboot|poweroff
             power-mode saver|balanced|performance|cycle|get
             get KEY (e.g. rv get bar.width)   doctor
@@ -302,6 +303,7 @@ case "$action" in
     app) app "${1:-terminal}" ;;
     tools) exec python3 "$tui_dir/tools.py" list "$@" ;;
     wallpaper) exec python3 "$tui_dir/wallpaper.py" "$@" ;;
+    papers) exec python3 "$tui_dir/papers.py" "$@" ;;
     calendar-sync) exec python3 "$tui_dir/calsync.py" --check ;;
     tool) exec python3 "$tui_dir/tools.py" run "$@" ;;
     screenshot) screenshot "$@" ;;
