@@ -5,11 +5,15 @@ import Quickshell.Widgets
 import Quickshell.Services.Notifications
 
 // One notification. Used by the toasts and by the history list.
+// Click to read all of it; expanded, it offers Copy (and Open, if the app
+// has a default action).
 Rectangle {
     id: root
 
     required property var notification
     property bool toast: false
+    property bool expanded: false
+    property bool copied: false
     signal closed()
 
     readonly property bool critical: notification.urgency === NotificationUrgency.Critical
@@ -24,6 +28,28 @@ Rectangle {
     border.color: critical ? Config.alpha(Config.bad, 0.7) : Config.line
 
     HoverHandler { id: hover }
+
+    // Plain text of the notification: markup removed, entities decoded.
+    function plainText() {
+        const body = (notification.body || "")
+            .replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, "")
+            .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+            .replace(/&#39;|&apos;/g, "'").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+        return [notification.summary || "", body].filter(t => t.trim() !== "").join("\n\n");
+    }
+    function copy() {
+        Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "sh", plainText()]);
+        copied = true;
+        copiedTimer.restart();
+    }
+    Timer { id: copiedTimer; interval: 1500; onTriggered: root.copied = false }
+
+    // Behind the content, so the close and action buttons keep their clicks.
+    MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.expanded = !root.expanded
+    }
 
     ColumnLayout {
         id: layout
@@ -91,8 +117,10 @@ Rectangle {
                     }
                 }
                 Text {
+                    id: summary
                     Layout.fillWidth: true
-                    elide: Text.ElideRight
+                    elide: root.expanded ? Text.ElideNone : Text.ElideRight
+                    wrapMode: root.expanded ? Text.Wrap : Text.NoWrap
                     text: root.notification.summary
                     color: Config.text
                     font.family: Config.font
@@ -100,17 +128,59 @@ Rectangle {
                     font.bold: true
                 }
                 Text {
+                    id: body
                     Layout.fillWidth: true
                     visible: text !== ""
-                    text: root.notification.body
+                    // StyledText ignores plain newlines.
+                    text: (root.notification.body || "").replace(/\n/g, "<br>")
                     textFormat: Text.StyledText
                     wrapMode: Text.Wrap
-                    maximumLineCount: root.toast ? 4 : 3
-                    elide: Text.ElideRight
+                    maximumLineCount: root.expanded ? 10000 : root.toast ? 4 : 3
+                    elide: root.expanded ? Text.ElideNone : Text.ElideRight
                     color: Config.muted
                     font.family: Config.font
                     font.pixelSize: Config.fontSize - 1
                     onLinkActivated: link => Qt.openUrlExternally(link)
+                }
+                Text {
+                    visible: !root.expanded && (summary.truncated || body.truncated)
+                    text: "click to read all"
+                    color: Config.alpha(Config.muted, 0.7)
+                    font.family: Config.font
+                    font.pixelSize: Config.fontSize - 3
+                }
+            }
+        }
+
+        RowLayout {
+            visible: root.expanded
+            Layout.fillWidth: true
+            spacing: 6
+            Repeater {
+                model: [
+                    { label: root.copied ? "Copied" : "Copy", run: () => root.copy(), show: true },
+                    { label: "Open", run: () => { root.defaultAction.invoke(); if (root.toast) root.closed(); }, show: root.defaultAction !== null },
+                ].filter(b => b.show)
+                Rectangle {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    implicitHeight: 26
+                    radius: Config.rounding - 4
+                    color: buttonArea.containsMouse ? Config.alpha(Config.accent, 0.25) : Config.hover
+                    Text {
+                        anchors.centerIn: parent
+                        text: parent.modelData.label
+                        color: root.copied && parent.modelData.label === "Copied" ? Config.good : Config.text
+                        font.family: Config.font
+                        font.pixelSize: Config.fontSize - 2
+                    }
+                    MouseArea {
+                        id: buttonArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: parent.modelData.run()
+                    }
                 }
             }
         }
@@ -146,14 +216,6 @@ Rectangle {
                     }
                 }
             }
-        }
-    }
-
-    // Clicking the body runs the default action (usually: focus the app).
-    TapHandler {
-        onTapped: {
-            if (root.defaultAction) root.defaultAction.invoke();
-            if (root.toast) root.closed();
         }
     }
 }

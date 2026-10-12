@@ -41,9 +41,9 @@ LazyLoader {
                         function onClosed() { Notifs.dropToast(card.modelData); }
                     }
                     Timer {
-                        // Pause while the pointer rests on the toast.
+                        // Pause while the pointer rests on the toast or it is opened.
                         interval: Notifs.timeoutFor(card.modelData)
-                        running: interval > 0 && !hover.hovered
+                        running: interval > 0 && !hover.hovered && !card.expanded
                         onTriggered: Notifs.dropToast(card.modelData)
                     }
                     HoverHandler { id: hover }
