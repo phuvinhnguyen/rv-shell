@@ -440,10 +440,12 @@ def update_links(vault: Path, old: str, new: str) -> list[Path]:
     return changed
 
 
-def file_pdf(pdf: Path, p: dict, state: dict, quiet: bool = False, dry: bool = False) -> str:
+def file_pdf(pdf: Path, p: dict, state: dict, quiet: bool = False, dry: bool = False,
+             meta: dict | None = None) -> str:
+    """`meta` (title, authors, year, venue, bibtex…) skips the lookup: rv's paper search knows it."""
     if not ready(pdf):
         return "skipped (not a finished PDF)"
-    meta = lookup(pdf, p)
+    meta = meta or lookup(pdf, p)
     if not meta:
         state[pdf.name] = {"status": "unknown", "at": dt.datetime.now().isoformat(timespec="seconds")}
         return "no arXiv id or DOI found — left as is"
@@ -456,6 +458,9 @@ def file_pdf(pdf: Path, p: dict, state: dict, quiet: bool = False, dry: bool = F
     p["folder"].mkdir(parents=True, exist_ok=True)
     relinked = []
     if new != pdf:
+        # Claim the name first, so the folder watcher leaves the arriving file alone.
+        state[new.name] = {"status": "filing"}
+        rvlib.write_json(STATE, {**load_state(), new.name: state[new.name]})
         shutil.move(str(pdf), str(new))
         relinked = update_links(p["vault"], pdf.name, new.name)
     p["notes"].mkdir(parents=True, exist_ok=True)

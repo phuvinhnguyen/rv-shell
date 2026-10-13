@@ -14,6 +14,7 @@ import Quickshell.Io
 //   :  clip    clipboard history (Super+V)
 //   >  run     a shell command (Enter: in the background, Shift+Enter: in a terminal)
 //   =  calc    arithmetic; Enter copies the result
+//   (apps: the last two rows search the web and research papers for what was typed)
 //   ?  web     Enter searches DuckDuckGo: a quick answer, then pages; Enter on
 //              one opens it in the browser (Shift+Enter: the full results page)
 Singleton {
@@ -228,10 +229,13 @@ Singleton {
         }
         out.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
         const top = out.slice(0, 60);
-        // Always offer the web as the last resort.
-        if (m === "apps" && n)
+        // Always offer the web (and research papers) as the last resort.
+        if (m === "apps" && n) {
             top.push({ kind: "websearch", title: `Search the web for “${text.trim()}”`, subtitle: "Enter: results here · Shift+Enter: open in the browser",
                        glyph: Icons.web, value: text.trim() });
+            top.push({ kind: "papers", title: `Search papers for “${text.trim()}”`, subtitle: "arXiv, ACL, OpenReview, Crossref · download or copy BibTeX",
+                       glyph: Icons.paper, value: text.trim() });
+        }
         return top;
     }
 
@@ -265,6 +269,9 @@ Singleton {
             break;
         case "clip":
             Quickshell.execDetached(["sh", "-c", 'cliphist decode "$1" | wl-copy', "sh", r.value]);
+            break;
+        case "papers":
+            Quickshell.execDetached([Config.rv, "open", "papersearch", r.value]);
             break;
         case "calc":
             Quickshell.execDetached(["wl-copy", r.value]);

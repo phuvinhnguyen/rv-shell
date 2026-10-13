@@ -58,7 +58,7 @@ def occurs(event: dict, day: dt.date) -> bool:
 class CalendarApp(rvlib.App):
     title = "Calendar"
     keys_hint = "a add · e edit · x delete · H/L month · c calendars · S sync"
-    interval = 1.5
+    interval = 1.0  # the countdowns tick
 
     def __init__(self) -> None:
         super().__init__()
@@ -122,6 +122,80 @@ class CalendarApp(rvlib.App):
         return sorted(mine + self.synced.get(day.isoformat(), []),
                       key=lambda e: (self.state(e, day) == "past", bool(e.get("time")), e.get("time") or ""))
 
+    def coming_up(self, count: int = 5, days: int = 366) -> list[dict]:
+        """The next `count` events that are not over yet, soonest first (ongoing ones included)."""
+        now = dt.datetime.now()
+        found: list[dict] = []
+        for n in range(days):
+            day = now.date() + dt.timedelta(days=n)
+            for e in self.on_day(day):
+                if e.get("time"):
+                    start = dt.datetime.combine(day, dt.time.fromisoformat(e["time"]))
+                    end = dt.datetime.combine(day, dt.time.fromisoformat(e["end"])) if e.get("end") else None
+                    if end is None or end <= start:
+                        end = start + dt.timedelta(hours=1) if not e.get("end") else \
+                            dt.datetime.combine(day, dt.time(23, 59))
+                else:
+                    start, end = dt.datetime.combine(day, dt.time()), dt.datetime.combine(day + dt.timedelta(days=1), dt.time())
+                if end > now:
+                    found.append({"event": e, "day": day, "start": start, "end": end, "allday": not e.get("time")})
+            if len(found) >= count:
+                break
+        found.sort(key=lambda f: (f["start"], not f["allday"]))
+        return found[:count]
+
+    @staticmethod
+    def countdown(delta: dt.timedelta) -> str:
+        """'in 2d 04h' / 'in 3h 05m' / 'in 12m 30s'."""
+        total = max(0, int(delta.total_seconds()))
+        d, rest = divmod(total, 86400)
+        h, rest = divmod(rest, 3600)
+        m, sec = divmod(rest, 60)
+        if d:
+            return f"{d}d {h:02d}h"
+        if h:
+            return f"{h}h {m:02d}m"
+        return f"{m}m {sec:02d}s"
+
+    def draw_coming_up(self, y: int, w: int) -> int:
+        """The five nearest events with live countdowns. Returns the next free line."""
+        A = rvlib.attr
+        now = dt.datetime.now()
+        today = now.date()
+        items = self.coming_up()
+        self.put(y, 3, "Coming up", w - 6, A(rvlib.ACCENT, curses.A_BOLD))
+        self.put(y, w - 15, now.strftime("now %H:%M:%S"), 13, A(rvlib.DIM))
+        if not items:
+            self.put(y + 1, 5, "Nothing scheduled", w - 8, A(rvlib.DIM))
+            return y + 3
+        for i, item in enumerate(items):
+            e, day, line = item["event"], item["day"], y + 1 + i
+            ongoing = item["start"] <= now
+            if item["allday"]:
+                left = "today" if day == today else "tomorrow" if (day - today).days == 1 else \
+                    f"in {(day - today).days} days"
+                clock, style = left.upper() if day == today else left, \
+                    A(rvlib.BAD, curses.A_BOLD) if day == today else A(rvlib.WARN, curses.A_BOLD) if (day - today).days == 1 else A(rvlib.ACCENT, curses.A_BOLD)
+            elif ongoing:
+                clock, style = f"NOW · {self.countdown(item['end'] - now)} left", A(rvlib.GOOD, curses.A_BOLD | curses.A_REVERSE)
+            else:
+                delta = item["start"] - now
+                clock = "in " + self.countdown(delta)
+                style = A(rvlib.BAD, curses.A_BOLD) if delta < dt.timedelta(hours=1) else \
+                    A(rvlib.WARN, curses.A_BOLD) if delta < dt.timedelta(hours=24) else A(rvlib.ACCENT, curses.A_BOLD)
+            day_name = "Today" if day == today else "Tomorrow" if (day - today).days == 1 else day.strftime("%a %-d %b")
+            when = f"{day_name:<10} " + ("all day" if item["allday"] else
+                                          e["time"] + (f"–{e['end']}" if e.get("end") else ""))
+            title = e.get("title") or "(untitled)"
+            if e.get("calendar"):
+                title += f"  · {e['calendar']}"
+            self.put(line, 3, f"{i + 1}", 2, A(rvlib.DIM, curses.A_BOLD))
+            self.put(line, 6, f" {clock} ".ljust(22), 22, style)
+            self.put(line, 30, when, 23, A(rvlib.TITLE) if day == today else 0)
+            self.put(line, 54, title, w - 57, curses.A_BOLD if ongoing or day == today else 0)
+        self.put(y + 2 + len(items), 2, "─" * (w - 4), w - 4, A(rvlib.DIM))
+        return y + 3 + len(items)
+
     def draw(self) -> None:
         s = self.screen
         s.erase()
@@ -130,15 +204,17 @@ class CalendarApp(rvlib.App):
         self.put(0, 2, self.title, w - 4, A(rvlib.TITLE, curses.A_BOLD))
         self.put(0, 14, self.day.strftime("%B %Y"), w - 16, A(rvlib.ACCENT, curses.A_BOLD))
         self.put(1, 2, "─" * (w - 4), w - 4, A(rvlib.DIM))
+        top = self.draw_coming_up(2, w) - 3  # everything below moves down by the panel
+        shown = {(item["day"], id(item["event"])) for item in self.coming_up()}
         today = dt.date.today()
         cell = 5
         x0 = 3
         for i, name in enumerate(["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]):
-            self.put(3, x0 + i * cell, f"{name:>3}", cell, A(rvlib.DIM, curses.A_BOLD))
+            self.put(top + 3, x0 + i * cell, f"{name:>3}", cell, A(rvlib.DIM, curses.A_BOLD))
         weeks = calendar.Calendar(0).monthdatescalendar(self.day.year, self.day.month)
         for r, week in enumerate(weeks):
             for c, day in enumerate(week):
-                y, x = 4 + r, x0 + c * cell
+                y, x = top + 4 + r, x0 + c * cell
                 style = 0 if day.month == self.day.month else A(rvlib.DIM)
                 if day == today:
                     style = A(rvlib.ACCENT, curses.A_BOLD)
@@ -149,7 +225,7 @@ class CalendarApp(rvlib.App):
                     self.put(y, x + 3, "•", 1, A(rvlib.WARN))
         # Agenda for the chosen day, beside the grid when there is room.
         side = w >= 80
-        ax, ay = (x0 + 7 * cell + 6, 3) if side else (3, 5 + len(weeks) + 1)
+        ax, ay = (x0 + 7 * cell + 6, top + 3) if side else (3, top + 5 + len(weeks) + 1)
         width = w - ax - 3
         self.put(ay, ax, self.day.strftime("%A %-d %B"), width, A(rvlib.TITLE, curses.A_BOLD))
         events = self.on_day(self.day)
@@ -171,15 +247,15 @@ class CalendarApp(rvlib.App):
             extra = e.get("note") or e.get("location")
             if extra and i == self.pick:
                 self.put(ay + 3 + len(events), ax, extra, width, A(rvlib.DIM))
-        # Upcoming (next 14 days) under the grid when beside.
+        # Later in the next two weeks (after the "Coming up" five), under the grid.
         if side:
-            uy = 5 + len(weeks) + 1
-            self.put(uy, x0, "Next two weeks", w - 6, A(rvlib.ACCENT, curses.A_BOLD))
+            uy = top + 5 + len(weeks) + 1
+            self.put(uy, x0, "Later, next two weeks", w - 6, A(rvlib.ACCENT, curses.A_BOLD))
             line = uy + 1
             for n in range(14):
                 d = today + dt.timedelta(days=n)
                 for e in self.on_day(d):
-                    if self.state(e, d) == "past":
+                    if self.state(e, d) == "past" or (d, id(e)) in shown:
                         continue
                     if line >= h - 3:
                         break

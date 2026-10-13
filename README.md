@@ -157,6 +157,15 @@ comments ("Accepted at …"), the DOI, or — with a free key in settings —
 Semantic Scholar / OpenAlex. `rv papers scan --dry-run` shows the plan first;
 `rv papers status` lists what was filed.
 
+**Finding papers:** type a title or topic in the launcher and pick *Search
+papers for “…”* (or the *Papers: search* utility, `rv open papersearch`).
+arXiv, the ACL Anthology, OpenReview and Crossref are searched together; Tab
+switches between sources. `Enter` reads the abstract, `Space` marks, `b`
+copies the BibTeX of every marked paper to the clipboard at once, `d`
+downloads them into `Papers` (renamed, with a note), `o` opens the page.
+OpenReview PDFs need a browser check, so those come from arXiv when the paper
+is there, or open in the browser.
+
 ## Your own utilities
 
 Drop a script in `~/.config/rv/tools/` and it is in the launcher — see

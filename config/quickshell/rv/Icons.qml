@@ -16,6 +16,7 @@ Singleton {
     readonly property string terminal: g(0xf018d)
     readonly property string calculator: g(0xf00ec)
     readonly property string web: g(0xf059f)
+    readonly property string paper: g(0xf0349)
     readonly property string answer: g(0xf06e9)
     readonly property string openExternal: g(0xf03cc)
     readonly property string application: g(0xf08c6)

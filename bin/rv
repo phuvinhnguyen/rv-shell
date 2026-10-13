@@ -109,7 +109,8 @@ open_tui() {
         settings) title="Settings" ;; wifi) title="Wi-Fi" ;; bluetooth) title="Bluetooth" ;;
         display) title="Displays" ;; audio) title="Audio" ;; calendar) title="Calendar" ;;
         keys) title="Keybindings" ;; emoji) title="Emoji" ;; tools) title="Utilities" ;;
-        monitor) title="System monitor" ;; power) title="Power" ;; *) title="$name" ;;
+        monitor) title="System monitor" ;; power) title="Power" ;; papersearch) title="Papers" ;;
+        *) title="$name" ;;
     esac
     (term --app-id "rv.$name" --title "$title" -- "$self" _tui "$name" "$@" &) >/dev/null 2>&1
 }
@@ -263,6 +264,7 @@ Shell       start | stop | restart | bar [toggle|show|hide] | lock
             launcher [apps|tools|clipboard|run|web] · launcher web "query"   notifications [list|clear|dnd]
             osd brightness|volume   media toggle|next|previous|stop
 Terminal    open settings|wifi|bluetooth|display|audio|calendar|keys|emoji|tools|monitor
+            open papersearch ["query"]   (find papers: download, copy BibTeX)
             (running `rv open X` again closes it)   settings = open settings
             term [--float] [--app-id ID] [--title T] [--hold] [-- cmd...]
 Apps        app terminal|browser|editor|files|monitor
